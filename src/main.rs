@@ -60,7 +60,8 @@ async fn main() -> Result<()> {
             pipeline::run_generate_miximages(&config, system.as_deref()).await?;
         }
         Command::CacheStats => {
-            cmd_cache_stats()?;
+            let config = load_config(&cli)?;
+            cmd_cache_stats(&config)?;
         }
         Command::Init => {
             cmd_init()?;
@@ -107,32 +108,55 @@ fn cmd_init() -> Result<()> {
 async fn cmd_info(config: &Config) -> Result<()> {
     let client = ScreenScraperClient::new(config)?;
 
-    tracing::info!("Fetching account info...");
+    tracing::info!("Fetching server status...");
 
-    let user = client.get_user_info().await?;
-    let infra = client.get_infra_info().await?;
-
-    eprintln!("=== User Info ===");
-    eprintln!("  Username:           {}", user.username);
-    eprintln!("  User ID:            {}", user.user_id);
-    eprintln!("  Level:              {}", user.level);
-    eprintln!("  Contribution:       {}", user.contribution);
-    eprintln!("  Favorite region:    {}", user.favorite_region);
-    eprintln!();
-    eprintln!("=== Quotas ===");
-    eprintln!("  Max threads:        {}", user.max_threads);
-    eprintln!("  Max req/min:        {}", user.max_requests_per_min);
-    eprintln!("  Requests today:     {} / {}", user.requests_today, user.max_requests_per_day);
-    eprintln!("  Failed today:       {}", user.requests_ko_today);
-    eprintln!("  Max download speed: {} KB/s", user.max_download_speed);
-    eprintln!();
-    eprintln!("=== Server Status ===");
-    eprintln!("  API status:         {}", if infra.api_open { "Open" } else { "Closed" });
-    for cpu in &infra.cpu_loads {
-        eprintln!("  {cpu}");
+    match client.get_infra_info().await {
+        Ok(infra) => {
+            eprintln!("=== Server Status ===");
+            eprintln!("  API status:         {}", if infra.api_open { "Open" } else { "Closed" });
+            for cpu in &infra.cpu_loads {
+                eprintln!("  {cpu}");
+            }
+            eprintln!("  Active threads:     {}", infra.active_threads);
+            eprintln!("  Active scrapers:    {}", infra.active_scrapers);
+        }
+        Err(e) => {
+            eprintln!("=== Server Status ===");
+            eprintln!("  Could not fetch: {e}");
+        }
     }
-    eprintln!("  Active threads:     {}", infra.active_threads);
-    eprintln!("  Active scrapers:    {}", infra.active_scrapers);
+
+    if config.has_user_credentials() {
+        tracing::info!("Fetching account info...");
+        match client.get_user_info().await {
+            Ok(user) => {
+                eprintln!();
+                eprintln!("=== User Info ===");
+                eprintln!("  Username:           {}", user.username);
+                eprintln!("  User ID:            {}", user.user_id);
+                eprintln!("  Level:              {}", user.level);
+                eprintln!("  Contribution:       {}", user.contribution);
+                eprintln!("  Favorite region:    {}", user.favorite_region);
+                eprintln!();
+                eprintln!("=== Quotas ===");
+                eprintln!("  Max threads:        {}", user.max_threads);
+                eprintln!("  Max req/min:        {}", user.max_requests_per_min);
+                eprintln!(
+                    "  Requests today:     {} / {}",
+                    user.requests_today, user.max_requests_per_day
+                );
+                eprintln!("  Failed today:       {}", user.requests_ko_today);
+                eprintln!("  Max download speed: {} KB/s", user.max_download_speed);
+            }
+            Err(e) => {
+                eprintln!();
+                eprintln!("  Could not fetch user info: {e}");
+            }
+        }
+    } else {
+        eprintln!();
+        eprintln!("  (Set both ssid and sspassword in config for user info and better quotas)");
+    }
 
     Ok(())
 }
@@ -140,7 +164,8 @@ async fn cmd_info(config: &Config) -> Result<()> {
 #[allow(clippy::print_stderr)]
 async fn cmd_systems(config: &Config) -> Result<()> {
     // Try cache first
-    if let Some(systems) = endpoints::load_systems_cache()? {
+    let cache_dir = config.cache_directory();
+    if let Some(systems) = endpoints::load_systems_cache(&cache_dir)? {
         tracing::info!("Loaded {} systems from cache", systems.len());
         print_systems(&systems);
         return Ok(());
@@ -150,7 +175,7 @@ async fn cmd_systems(config: &Config) -> Result<()> {
     tracing::info!("Fetching systems list...");
 
     let systems = client.get_systems_list().await?;
-    endpoints::save_systems_cache(&systems)?;
+    endpoints::save_systems_cache(&cache_dir, &systems)?;
     tracing::info!("Fetched {} systems (cached for next time)", systems.len());
     print_systems(&systems);
 
@@ -158,8 +183,8 @@ async fn cmd_systems(config: &Config) -> Result<()> {
 }
 
 #[allow(clippy::print_stderr)]
-fn cmd_cache_stats() -> Result<()> {
-    let cache = CacheStore::new(&CacheStore::default_dir());
+fn cmd_cache_stats(config: &Config) -> Result<()> {
+    let cache = CacheStore::new(&config.cache_directory());
     let stats = cache.all_stats()?;
 
     eprintln!("Cache directory: {}", cache.base_dir().display());

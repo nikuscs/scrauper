@@ -305,11 +305,148 @@ pub fn get_m3u_disc_paths(m3u_path: &Path, rom_dir: &Path) -> Result<Vec<PathBuf
         .collect())
 }
 
-/// Find a system by ES-DE folder name (case-insensitive match against system name).
+/// ES-DE folder name → ScreenScraper system ID mapping.
+/// Covers cases where ES-DE's standardized folder names don't match
+/// the ScreenScraper system names (e.g. "snes" → "Super Nintendo").
+fn es_de_folder_aliases() -> HashMap<&'static str, u64> {
+    HashMap::from([
+        // Nintendo consoles
+        ("nes", 3),
+        ("famicom", 3),
+        ("fds", 106),
+        ("snes", 4),
+        ("sfc", 4),
+        ("n64", 14),
+        ("n64dd", 122),
+        ("gc", 13),
+        ("gamecube", 13),
+        ("wii", 16),
+        ("wiiu", 18),
+        ("switch", 225),
+        // Nintendo portables
+        ("gb", 9),
+        ("gbc", 10),
+        ("gba", 12),
+        ("nds", 15),
+        ("n3ds", 17),
+        ("virtualboy", 11),
+        ("gameandwatch", 52),
+        ("pokemini", 211),
+        // Sega
+        ("megadrive", 1),
+        ("genesis", 1),
+        ("mastersystem", 2),
+        ("mark3", 2),
+        ("sega32x", 19),
+        ("megacd", 20),
+        ("segacd", 20),
+        ("gamegear", 21),
+        ("saturn", 22),
+        ("dreamcast", 23),
+        ("sg-1000", 109),
+        ("sg1000", 109),
+        // Sony
+        ("psx", 57),
+        ("ps2", 58),
+        ("ps3", 59),
+        ("ps4", 60),
+        ("psp", 61),
+        ("psvita", 62),
+        // NEC
+        ("pcengine", 31),
+        ("tg16", 31),
+        ("tg-16", 31),
+        ("pcenginecd", 114),
+        ("tg-cd", 114),
+        ("supergrafx", 105),
+        ("pcfx", 72),
+        // SNK
+        ("neogeo", 142),
+        ("neogeocd", 70),
+        ("ngp", 25),
+        ("ngpc", 82),
+        // Atari
+        ("atari2600", 26),
+        ("atari5200", 40),
+        ("atari7800", 41),
+        ("atari800", 43),
+        ("atarist", 42),
+        ("atarijaguar", 27),
+        ("atarijaguarcd", 171),
+        ("atarilynx", 28),
+        // Bandai
+        ("wonderswan", 45),
+        ("wonderswancolor", 46),
+        // Arcade
+        ("mame", 75),
+        ("arcade", 75),
+        ("fbneo", 75),
+        ("fba", 75),
+        ("cps", 6),
+        ("cps1", 6),
+        ("cps2", 7),
+        ("cps3", 8),
+        ("naomi", 56),
+        ("naomi2", 230),
+        ("naomigd", 227),
+        ("atomiswave", 53),
+        ("model2", 54),
+        ("model3", 55),
+        ("daphne", 49),
+        ("stv", 69),
+        // Home computers
+        ("amiga", 64),
+        ("amiga1200", 64),
+        ("amiga600", 64),
+        ("amigacd32", 130),
+        ("c64", 66),
+        ("amstradcpc", 65),
+        ("cpc", 65),
+        ("msx", 113),
+        ("msx1", 113),
+        ("msx2", 116),
+        ("msxturbor", 118),
+        ("zxspectrum", 76),
+        ("zx81", 77),
+        ("x68000", 79),
+        ("x1", 220),
+        ("dos", 135),
+        ("pc88", 221),
+        ("pc98", 208),
+        ("apple2", 86),
+        ("apple2gs", 217),
+        ("bbcmicro", 37),
+        ("fm7", 97),
+        ("fmtowns", 253),
+        // Other
+        ("3do", 29),
+        ("colecovision", 48),
+        ("intellivision", 115),
+        ("vectrex", 102),
+        ("channelf", 80),
+        ("cdimono1", 133),
+        ("cdtv", 129),
+        ("scummvm", 123),
+        ("xbox", 32),
+        ("xbox360", 33),
+    ])
+}
+
+/// Find a system by ES-DE folder name.
+/// First checks the ES-DE alias table (folder name → system ID),
+/// then falls back to case-insensitive name match against ScreenScraper system names.
 fn find_system_by_folder(folder_name: &str, systems: &[System]) -> Option<System> {
     let folder_lower = folder_name.to_lowercase();
 
-    // Direct name match (most common)
+    // Check ES-DE folder alias table first
+    let aliases = es_de_folder_aliases();
+    if let Some(&system_id) = aliases.get(folder_lower.as_str()) {
+        if let Some(system) = systems.iter().find(|s| s.id == system_id) {
+            return Some(system.clone());
+        }
+    }
+
+    // Fall back to direct name match
     systems.iter().find(|s| s.name.to_lowercase() == folder_lower).cloned()
 }
 
@@ -334,31 +471,52 @@ mod tests {
 
     #[test]
     fn test_find_system_by_folder() {
+        // Use realistic ScreenScraper system names (as returned by the API)
         let systems = vec![
             System {
                 id: 1,
-                name: "megadrive".to_string(),
+                name: "Megadrive".to_string(),
                 extensions: vec!["bin".to_string(), "gen".to_string()],
                 system_type: "Console".to_string(),
                 company: Some("Sega".to_string()),
             },
             System {
                 id: 4,
-                name: "snes".to_string(),
+                name: "Super Nintendo".to_string(),
                 extensions: vec!["sfc".to_string(), "smc".to_string()],
+                system_type: "Console".to_string(),
+                company: Some("Nintendo".to_string()),
+            },
+            System {
+                id: 14,
+                name: "Nintendo 64".to_string(),
+                extensions: vec!["n64".to_string(), "z64".to_string()],
                 system_type: "Console".to_string(),
                 company: Some("Nintendo".to_string()),
             },
         ];
 
+        // ES-DE folder "snes" maps to ScreenScraper "Super Nintendo" (ID 4)
         let found = find_system_by_folder("snes", &systems);
         assert!(found.is_some());
         assert_eq!(found.unwrap().id, 4);
 
         let found = find_system_by_folder("SNES", &systems);
         assert!(found.is_some());
+        assert_eq!(found.unwrap().id, 4);
 
+        // ES-DE folder "n64" maps to ScreenScraper "Nintendo 64" (ID 14)
         let found = find_system_by_folder("n64", &systems);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, 14);
+
+        // Direct name match still works (case-insensitive)
+        let found = find_system_by_folder("megadrive", &systems);
+        assert!(found.is_some());
+        assert_eq!(found.unwrap().id, 1);
+
+        // Unknown folder returns None
+        let found = find_system_by_folder("unknown_system", &systems);
         assert!(found.is_none());
     }
 
@@ -630,6 +788,52 @@ mod tests {
         assert!(find_system_by_folder("megadrive", &systems).is_some());
         assert!(find_system_by_folder("MEGADRIVE", &systems).is_some());
         assert!(find_system_by_folder("MegaDrive", &systems).is_some());
+    }
+
+    #[test]
+    fn test_find_system_by_folder_es_de_aliases() {
+        // Realistic systems as returned by ScreenScraper API
+        let systems = vec![
+            System {
+                id: 4,
+                name: "Super Nintendo".to_string(),
+                extensions: vec!["sfc".to_string()],
+                system_type: "Console".to_string(),
+                company: Some("Nintendo".to_string()),
+            },
+            System {
+                id: 57,
+                name: "Playstation".to_string(),
+                extensions: vec!["bin".to_string()],
+                system_type: "Console".to_string(),
+                company: Some("Sony".to_string()),
+            },
+            System {
+                id: 9,
+                name: "Game Boy".to_string(),
+                extensions: vec!["gb".to_string()],
+                system_type: "Console Portable".to_string(),
+                company: Some("Nintendo".to_string()),
+            },
+            System {
+                id: 13,
+                name: "Gamecube".to_string(),
+                extensions: vec!["iso".to_string()],
+                system_type: "Console".to_string(),
+                company: Some("Nintendo".to_string()),
+            },
+        ];
+
+        // ES-DE folder aliases
+        assert_eq!(find_system_by_folder("snes", &systems).unwrap().id, 4);
+        assert_eq!(find_system_by_folder("sfc", &systems).unwrap().id, 4);
+        assert_eq!(find_system_by_folder("psx", &systems).unwrap().id, 57);
+        assert_eq!(find_system_by_folder("gb", &systems).unwrap().id, 9);
+        assert_eq!(find_system_by_folder("gc", &systems).unwrap().id, 13);
+        assert_eq!(find_system_by_folder("gamecube", &systems).unwrap().id, 13);
+
+        // Genesis is an alias for Megadrive (ID 1) — not in our list, so None
+        assert!(find_system_by_folder("genesis", &systems).is_none());
     }
 
     #[test]

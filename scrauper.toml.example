@@ -2,11 +2,11 @@
 # Copy this file to scrauper.toml and fill in your credentials.
 
 [credentials]
-# Developer credentials (required)
-devid = ""
-devpassword = ""
+# Developer credentials are built-in; override only if you have your own
+# devid = ""
+# devpassword = ""
 softname = "scrauper"
-# ScreenScraper user credentials (required for game lookups)
+# ScreenScraper user credentials (recommended for better quotas)
 ssid = ""
 sspassword = ""
 
@@ -17,6 +17,8 @@ rom_directory = "~/ROMs"
 media_directory = "~/.emulationstation/downloaded_media"
 # Where ES-DE expects gamelist.xml files
 gamelist_directory = "~/.emulationstation/gamelists"
+# Cache directory for API responses and systems list (default: ./cache)
+cache_directory = "./cache"
 
 [scraping]
 # Which systems to scrape (empty = all detected systems)

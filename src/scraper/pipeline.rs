@@ -36,39 +36,48 @@ pub async fn run_scrape(config: &Config, options: &ScrapeOptions) -> Result<()> 
     // 1. Init: fetch user info, set up rate limiter
     let client = ScreenScraperClient::new(config)?;
 
-    tracing::info!("Fetching account info...");
-    let user_info = with_retry(&config.network, || client.get_user_info()).await?;
+    let (_max_threads, quota) = if config.has_user_credentials() {
+        tracing::info!("Fetching account info...");
+        let user_info = with_retry(&config.network, || client.get_user_info()).await?;
 
-    let max_threads = if config.network.max_threads_override > 0 {
-        config.network.max_threads_override
+        let threads = if config.network.max_threads_override > 0 {
+            config.network.max_threads_override
+        } else {
+            user_info.max_threads
+        };
+
+        tracing::info!(
+            "User: {} | Threads: {} | Requests today: {}/{}",
+            user_info.username,
+            threads,
+            user_info.requests_today,
+            user_info.max_requests_per_day
+        );
+
+        let q = Arc::new(ApiQuotaTracker::new(
+            threads,
+            user_info.max_requests_per_min,
+            user_info.max_requests_per_day,
+            user_info.requests_today,
+        ));
+        (threads, q)
     } else {
-        user_info.max_threads
+        tracing::warn!("No user credentials — using anonymous mode (1 thread, limited quotas)");
+        let threads = config.network.max_threads_override.max(1);
+        let q = Arc::new(ApiQuotaTracker::new(threads, 1, 10000, 0));
+        (threads, q)
     };
 
-    tracing::info!(
-        "User: {} | Threads: {} | Requests today: {}/{}",
-        user_info.username,
-        max_threads,
-        user_info.requests_today,
-        user_info.max_requests_per_day
-    );
-
-    let quota = Arc::new(ApiQuotaTracker::new(
-        max_threads,
-        user_info.max_requests_per_min,
-        user_info.max_requests_per_day,
-        user_info.requests_today,
-    ));
-
     // Init cache store
-    let cache = Arc::new(CacheStore::new(&CacheStore::default_dir()));
+    let cache_dir = config.cache_directory();
+    let cache = Arc::new(CacheStore::new(&cache_dir));
 
     // 2. Discover: get systems list, scan ROM directories
-    let systems = if let Some(s) = endpoints::load_systems_cache()? {
+    let systems = if let Some(s) = endpoints::load_systems_cache(&cache_dir)? {
         s
     } else {
         let s = client.get_systems_list().await?;
-        endpoints::save_systems_cache(&s)?;
+        endpoints::save_systems_cache(&cache_dir, &s)?;
         s
     };
 

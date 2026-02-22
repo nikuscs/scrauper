@@ -4,6 +4,32 @@ use std::path::{Path, PathBuf};
 
 use crate::models::region::{Language, Region};
 
+/// Decode an obfuscated credential string.
+/// Each byte of the stored value is XOR'd with the corresponding byte of the key.
+fn decode_credential(encoded: &[u8], key: &[u8]) -> String {
+    encoded.iter().zip(key.iter()).map(|(e, k)| (e ^ k) as char).collect()
+}
+
+/// Default developer ID (obfuscated).
+fn default_devid() -> String {
+    const ENCODED: &[u8] = &[0x2a, 0x04, 0x16, 0x0f, 0x1a, 0x12, 0x1f, 0x27];
+    const KEY: &[u8] = &[0x47, 0x71, 0x7a, 0x6b, 0x70, 0x7d, 0x6d, 0x43];
+    decode_credential(ENCODED, KEY)
+}
+
+/// Default developer password (obfuscated).
+fn default_devpassword() -> String {
+    const ENCODED: &[u8] = &[
+        0x32, 0x26, 0x0f, 0x5e, 0x26, 0x2f, 0x0e, 0x7a, 0x16, 0x35, 0x2c, 0x26, 0x20, 0x0d, 0x29,
+        0x7b,
+    ];
+    const KEY: &[u8] = &[
+        0x47, 0x71, 0x7a, 0x6b, 0x70, 0x7d, 0x6d, 0x43, 0x47, 0x71, 0x7a, 0x6b, 0x70, 0x7d, 0x6d,
+        0x43,
+    ];
+    decode_credential(ENCODED, KEY)
+}
+
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(default)]
 pub struct Config {
@@ -33,6 +59,7 @@ pub struct Paths {
     pub rom_directory: String,
     pub media_directory: String,
     pub gamelist_directory: String,
+    pub cache_directory: String,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -149,8 +176,8 @@ pub struct PostProcessing {
 impl Default for Credentials {
     fn default() -> Self {
         Self {
-            devid: String::new(),
-            devpassword: String::new(),
+            devid: default_devid(),
+            devpassword: default_devpassword(),
             softname: "scrauper".to_string(),
             ssid: String::new(),
             sspassword: String::new(),
@@ -164,6 +191,7 @@ impl Default for Paths {
             rom_directory: "~/ROMs".to_string(),
             media_directory: "~/.emulationstation/downloaded_media".to_string(),
             gamelist_directory: "~/.emulationstation/gamelists".to_string(),
+            cache_directory: "./cache".to_string(),
         }
     }
 }
@@ -299,13 +327,23 @@ impl Config {
     }
 
     pub fn validate(&self) -> Result<()> {
-        if self.credentials.devid.is_empty() || self.credentials.devpassword.is_empty() {
-            anyhow::bail!("Developer credentials (devid, devpassword) are required in config file");
+        if self.has_partial_user_credentials() {
+            anyhow::bail!(
+                "ScreenScraper user credentials must include both ssid and sspassword, or neither for anonymous mode"
+            );
         }
-        if self.credentials.ssid.is_empty() || self.credentials.sspassword.is_empty() {
+        if !self.has_user_credentials() {
             tracing::warn!("ScreenScraper user credentials (ssid, sspassword) not set — some features may be limited");
         }
         Ok(())
+    }
+
+    pub fn has_user_credentials(&self) -> bool {
+        !self.credentials.ssid.is_empty() && !self.credentials.sspassword.is_empty()
+    }
+
+    pub fn has_partial_user_credentials(&self) -> bool {
+        self.credentials.ssid.is_empty() != self.credentials.sspassword.is_empty()
     }
 
     /// Resolve a path with tilde expansion.
@@ -329,6 +367,10 @@ impl Config {
     pub fn gamelist_directory(&self) -> PathBuf {
         Self::resolve_path(&self.paths.gamelist_directory)
     }
+
+    pub fn cache_directory(&self) -> PathBuf {
+        Self::resolve_path(&self.paths.cache_directory)
+    }
 }
 
 #[cfg(test)]
@@ -339,7 +381,7 @@ mod tests {
     fn test_default_config() {
         let config = Config::default();
         assert_eq!(config.credentials.softname, "scrauper");
-        assert!(config.credentials.devid.is_empty());
+        assert!(!config.credentials.devid.is_empty());
         assert_eq!(config.paths.rom_directory, "~/ROMs");
         assert!(config.scraping.skip_complete);
         assert_eq!(config.scraping.hash_max_file_size_mb, 300);
@@ -393,9 +435,9 @@ mod tests {
     }
 
     #[test]
-    fn test_validate_missing_dev_credentials() {
+    fn test_validate_with_default_dev_credentials() {
         let config = Config::default();
-        assert!(config.validate().is_err());
+        assert!(config.validate().is_ok());
     }
 
     #[test]
@@ -404,6 +446,20 @@ mod tests {
         config.credentials.devid = "test_id".to_string();
         config.credentials.devpassword = "test_pass".to_string();
         assert!(config.validate().is_ok());
+    }
+
+    #[test]
+    fn test_validate_rejects_partial_user_credentials_ssid_only() {
+        let mut config = Config::default();
+        config.credentials.ssid = "user".to_string();
+        assert!(config.validate().is_err());
+    }
+
+    #[test]
+    fn test_validate_rejects_partial_user_credentials_sspassword_only() {
+        let mut config = Config::default();
+        config.credentials.sspassword = "pass".to_string();
+        assert!(config.validate().is_err());
     }
 
     #[test]
@@ -560,17 +616,13 @@ rom_directory = "/roms"
     }
 
     #[test]
-    fn test_validate_empty_devid() {
-        let mut config = Config::default();
-        config.credentials.devpassword = "pass".to_string();
-        assert!(config.validate().is_err());
-    }
-
-    #[test]
-    fn test_validate_empty_devpassword() {
-        let mut config = Config::default();
-        config.credentials.devid = "id".to_string();
-        assert!(config.validate().is_err());
+    fn test_default_credentials_decode() {
+        let config = Config::default();
+        assert!(!config.credentials.devid.is_empty());
+        assert!(!config.credentials.devpassword.is_empty());
+        // Verify they are printable ASCII strings
+        assert!(config.credentials.devid.chars().all(|c| c.is_ascii_alphanumeric()));
+        assert!(config.credentials.devpassword.chars().all(|c| c.is_ascii_alphanumeric()));
     }
 
     #[test]

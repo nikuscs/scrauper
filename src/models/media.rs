@@ -56,7 +56,7 @@ impl MediaType {
             MediaType::BoxBack => format!("box-2D-back({suffix})"),
             MediaType::Box3d => format!("box-3D({suffix})"),
             MediaType::Marquee => format!("wheel-hd({suffix})"),
-            MediaType::PhysicalMedia => format!("support-texture({suffix})"),
+            MediaType::PhysicalMedia => format!("support-2D({suffix})"),
             MediaType::FanArt => "fanart".to_string(),
             MediaType::Manual => format!("manuel({suffix})"),
             MediaType::Miximage => "mixrbv2".to_string(),
@@ -175,7 +175,7 @@ mod tests {
         let jp = Region::Jp;
         assert_eq!(MediaType::TitleScreen.api_media_id(&jp), "sstitle(jp)");
         assert_eq!(MediaType::BoxBack.api_media_id(&jp), "box-2D-back(jp)");
-        assert_eq!(MediaType::PhysicalMedia.api_media_id(&jp), "support-texture(jp)");
+        assert_eq!(MediaType::PhysicalMedia.api_media_id(&jp), "support-2D(jp)");
         assert_eq!(MediaType::Manual.api_media_id(&jp), "manuel(jp)");
     }
 

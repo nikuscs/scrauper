@@ -33,7 +33,7 @@ pub async fn download_media(
 
     // Determine which API endpoint to use
     let endpoint = match media_type {
-        MediaType::Video | MediaType::Manual => "mediaVideoJeu.php", // Manuals use same endpoint
+        MediaType::Video => "mediaVideoJeu.php",
         _ => "mediaJeu.php",
     };
 
@@ -94,6 +94,12 @@ pub async fn download_media(
         return download_cover_fallback(client, game_id, system_id, dest_path, config).await;
     }
 
+    // If media_type is Marquee (wheel-hd), fall back to standard wheel
+    if *media_type == MediaType::Marquee {
+        tracing::debug!("wheel-hd not found, trying standard wheel fallback");
+        return download_wheel_fallback(client, game_id, system_id, dest_path, config).await;
+    }
+
     Ok(DownloadResult::NotAvailable)
 }
 
@@ -109,6 +115,51 @@ async fn download_cover_fallback(
 
     for region in &config.locale.region_priority {
         let media_id = MediaType::BoxFront.api_media_id(region);
+
+        let params: Vec<(&str, String)> = vec![
+            ("systemeid", system_id.to_string()),
+            ("jeuid", game_id.to_string()),
+            ("media", media_id),
+        ];
+
+        match client.get_raw("mediaJeu.php", &params, timeout).await {
+            Ok(response) => {
+                let body = response.bytes().await.map_err(ApiError::from)?;
+                let body_str = String::from_utf8_lossy(&body);
+
+                if body_str.starts_with("NOMEDIA") || body.is_empty() {
+                    continue;
+                }
+                if body_str.starts_with("CRCOK")
+                    || body_str.starts_with("MD5OK")
+                    || body_str.starts_with("SHA1OK")
+                {
+                    return Ok(DownloadResult::Unchanged);
+                }
+
+                write_media_atomic(dest_path, &body).await?;
+                return Ok(DownloadResult::Downloaded(dest_path.to_path_buf(), body.to_vec()));
+            }
+            Err(ApiError::GameNotFound) => {}
+            Err(e) => return Err(e.into()),
+        }
+    }
+
+    Ok(DownloadResult::NotAvailable)
+}
+
+/// Download standard wheel as a fallback for missing wheel-hd marquee.
+async fn download_wheel_fallback(
+    client: &ScreenScraperClient,
+    game_id: u64,
+    system_id: u64,
+    dest_path: &Path,
+    config: &Config,
+) -> Result<DownloadResult> {
+    let timeout = Duration::from_secs(config.network.download_timeout_secs);
+
+    for region in &config.locale.region_priority {
+        let media_id = format!("wheel({})", region.api_suffix());
 
         let params: Vec<(&str, String)> = vec![
             ("systemeid", system_id.to_string()),

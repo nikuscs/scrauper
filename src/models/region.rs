@@ -127,12 +127,49 @@ pub fn resolve_by_region<T: Clone>(available: &[(Region, T)], priority: &[Region
     available.first().map(|(_, val)| val.clone())
 }
 
-/// Resolve a text value from a JSON object with region-keyed fields like "nom_us", "nom_wor".
+/// Resolve a text value from a JSON value with region-keyed fields.
+/// Handles two formats:
+/// - Object: `{"nom_wor": "...", "nom_us": "..."}`
+/// - Array: `[{"region": "wor", "text": "..."}, {"region": "us", "text": "..."}]`
 pub fn resolve_region_text(
     obj: &serde_json::Value,
     prefix: &str,
     priority: &[Region],
 ) -> Option<String> {
+    // Format 1: Array of {region, text} objects
+    if let Some(arr) = obj.as_array() {
+        for region in priority {
+            let suffix = region.api_suffix();
+            if let Some(entry) =
+                arr.iter().find(|e| e.get("region").and_then(|r| r.as_str()) == Some(suffix))
+            {
+                if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
+                    if !text.is_empty() {
+                        return Some(text.to_string());
+                    }
+                }
+            }
+        }
+        // Fall back to "ss" region
+        if let Some(entry) =
+            arr.iter().find(|e| e.get("region").and_then(|r| r.as_str()) == Some("ss"))
+        {
+            if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
+                if !text.is_empty() {
+                    return Some(text.to_string());
+                }
+            }
+        }
+        // Fall back to first entry with text
+        return arr.iter().find_map(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .filter(|s| !s.is_empty())
+                .map(std::string::ToString::to_string)
+        });
+    }
+
+    // Format 2: Object with "prefix_region" keys
     for region in priority {
         let key = format!("{}_{}", prefix, region.api_suffix());
         if let Some(serde_json::Value::String(val)) = obj.get(&key) {
@@ -141,7 +178,6 @@ pub fn resolve_region_text(
             }
         }
     }
-    // Fall back to the "ss" internal name if it exists
     let ss_key = format!("{}_ss", prefix);
     if let Some(serde_json::Value::String(val)) = obj.get(&ss_key) {
         if !val.is_empty() {
@@ -151,19 +187,55 @@ pub fn resolve_region_text(
     None
 }
 
-/// Resolve a text value from a JSON object with language-keyed fields like "synopsis_en".
+/// Resolve a text value from a JSON value with language-keyed fields.
+/// Handles two formats:
+/// - Object: `{"synopsis_en": "..."}`
+/// - Array: `[{"langue": "en", "text": "..."}]`
 pub fn resolve_language_text(
     obj: &serde_json::Value,
     prefix: &str,
     language: Language,
 ) -> Option<String> {
+    // Format 1: Array of {langue, text} objects
+    if let Some(arr) = obj.as_array() {
+        let suffix = language.api_suffix();
+        if let Some(entry) =
+            arr.iter().find(|e| e.get("langue").and_then(|l| l.as_str()) == Some(suffix))
+        {
+            if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
+                if !text.is_empty() {
+                    return Some(text.to_string());
+                }
+            }
+        }
+        // Fall back to English
+        if language != Language::En {
+            if let Some(entry) =
+                arr.iter().find(|e| e.get("langue").and_then(|l| l.as_str()) == Some("en"))
+            {
+                if let Some(text) = entry.get("text").and_then(|t| t.as_str()) {
+                    if !text.is_empty() {
+                        return Some(text.to_string());
+                    }
+                }
+            }
+        }
+        // Fall back to first entry
+        return arr.iter().find_map(|e| {
+            e.get("text")
+                .and_then(|t| t.as_str())
+                .filter(|s| !s.is_empty())
+                .map(std::string::ToString::to_string)
+        });
+    }
+
+    // Format 2: Object with "prefix_language" keys
     let key = format!("{}_{}", prefix, language.api_suffix());
     if let Some(serde_json::Value::String(val)) = obj.get(&key) {
         if !val.is_empty() {
             return Some(val.clone());
         }
     }
-    // Fall back to English
     if language != Language::En {
         let en_key = format!("{}_en", prefix);
         if let Some(serde_json::Value::String(val)) = obj.get(&en_key) {

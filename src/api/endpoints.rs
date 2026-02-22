@@ -1,4 +1,4 @@
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use anyhow::{Context, Result};
 use serde::Deserialize;
@@ -196,7 +196,7 @@ impl SystemEntry {
             .extensions
             .as_deref()
             .unwrap_or("")
-            .split(' ')
+            .split([' ', ','])
             .filter(|s| !s.is_empty())
             .map(|s| s.trim_start_matches('.').to_lowercase())
             .collect();
@@ -232,17 +232,13 @@ impl ScreenScraperClient {
 
 // --- Systems cache ---
 
-fn cache_dir() -> PathBuf {
-    dirs::config_dir().unwrap_or_else(|| PathBuf::from(".")).join("scrauper")
-}
-
-fn systems_cache_path() -> PathBuf {
-    cache_dir().join("systems_cache.json")
+fn systems_cache_path(cache_dir: &Path) -> PathBuf {
+    cache_dir.join("systems_cache.json")
 }
 
 /// Load systems from local cache if fresh (< 7 days).
-pub fn load_systems_cache() -> Result<Option<Vec<System>>> {
-    let path = systems_cache_path();
+pub fn load_systems_cache(cache_dir: &Path) -> Result<Option<Vec<System>>> {
+    let path = systems_cache_path(cache_dir);
     if !path.exists() {
         return Ok(None);
     }
@@ -263,16 +259,15 @@ pub fn load_systems_cache() -> Result<Option<Vec<System>>> {
 }
 
 /// Save systems list to local cache.
-pub fn save_systems_cache(systems: &[System]) -> Result<()> {
-    let dir = cache_dir();
-    std::fs::create_dir_all(&dir).context("Failed to create cache directory")?;
+pub fn save_systems_cache(cache_dir: &Path, systems: &[System]) -> Result<()> {
+    std::fs::create_dir_all(cache_dir).context("Failed to create cache directory")?;
 
     let cache =
         SystemsCache { fetched_at: chrono::Utc::now().to_rfc3339(), systems: systems.to_vec() };
 
     let json = serde_json::to_string_pretty(&cache).context("Failed to serialize systems cache")?;
 
-    std::fs::write(systems_cache_path(), json).context("Failed to write systems cache")?;
+    std::fs::write(systems_cache_path(cache_dir), json).context("Failed to write systems cache")?;
 
     Ok(())
 }
@@ -602,6 +597,8 @@ mod tests {
     #[test]
     fn test_save_and_load_systems_cache() {
         use crate::models::system::System;
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_dir = tmp.path();
         let systems = vec![System {
             id: 1,
             name: "Test System".to_string(),
@@ -610,10 +607,10 @@ mod tests {
             company: Some("TestCo".to_string()),
         }];
         // Save should succeed
-        save_systems_cache(&systems).unwrap();
+        save_systems_cache(cache_dir, &systems).unwrap();
 
         // Load should return the data (fresh cache)
-        let loaded = load_systems_cache().unwrap();
+        let loaded = load_systems_cache(cache_dir).unwrap();
         assert!(loaded.is_some());
         let loaded = loaded.unwrap();
         assert_eq!(loaded.len(), 1);
