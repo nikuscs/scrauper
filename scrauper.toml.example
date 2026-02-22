@@ -1,0 +1,122 @@
+# Scrauper Configuration
+# Copy this file to scrauper.toml and fill in your credentials.
+
+[credentials]
+# Developer credentials (required)
+devid = ""
+devpassword = ""
+softname = "scrauper"
+# ScreenScraper user credentials (required for game lookups)
+ssid = ""
+sspassword = ""
+
+[paths]
+# Where your ROM files are organized by system
+rom_directory = "~/ROMs"
+# Where ES-DE expects downloaded media
+media_directory = "~/.emulationstation/downloaded_media"
+# Where ES-DE expects gamelist.xml files
+gamelist_directory = "~/.emulationstation/gamelists"
+
+[scraping]
+# Which systems to scrape (empty = all detected systems)
+systems = []
+# Skip games that already have all enabled content
+skip_complete = true
+# Skip hashing files larger than this (MB)
+hash_max_file_size_mb = 300
+# Scrape folder-based games
+scrape_folders = false
+# Glob patterns to exclude
+exclude_patterns = ["**/.DS_Store"]
+
+# Hide individual disc files in gamelist when an M3U playlist exists
+hide_individual_discs = true
+# Minimum confidence score to auto-accept a filename match (0.0-1.0)
+min_auto_accept_confidence = 0.8
+
+[scraping.search]
+# Search strategies in order: "hash" (CRC/MD5/SHA1), "filename" (name lookup)
+strategy = ["hash", "filename"]
+
+[content]
+# Which metadata fields to scrape
+name = true
+description = true
+rating = true
+release_date = true
+developer = true
+publisher = true
+genre = true
+players = true
+
+[content.media]
+# Which media types to download
+video = false
+screenshot = true
+titlescreen = false
+box_front = true
+box_back = false
+marquee = true
+box_3d = true
+physical_media = false
+fan_art = false
+manual = false
+
+[content.media.fallbacks]
+# Use 2D cover when 3D box is unavailable
+cover_for_missing_3d_box = true
+
+[miximage]
+# Generate composite miximages (screenshot + box + marquee + physical media)
+enabled = true
+overwrite_existing = false
+# Resolution: 640x480 (1x), 1280x960 (2x), 1920x1440 (3x)
+width = 1280
+height = 960
+# Output format: "png" or "jpg"
+format = "png"
+
+[miximage.screenshot]
+# Fit mode for horizontal screenshots: "contain", "crop", "stretch"
+horizontal_fit = "crop"
+# Fit mode for vertical screenshots: "contain", "crop", "stretch"
+vertical_fit = "contain"
+# Aspect ratio threshold for switching fit modes
+aspect_ratio_threshold = 1.4
+# Scaling method: "sharp" (nearest neighbor), "smooth" (Lanczos3)
+scaling = "sharp"
+
+[miximage.layout]
+# Box overlay size: "small", "medium", "large"
+box_size = "medium"
+# Physical media overlay size: "small", "medium", "large"
+physical_media_size = "medium"
+# Include physical media (cartridge/disc) in miximage
+include_physical_media = true
+# Background fill color
+blank_fill_color = "#000000"
+
+[locale]
+# Region priority for names, media, dates (first match wins)
+region_priority = ["wor", "us", "eu", "jp"]
+# Language for descriptions and genres
+language = "en"
+
+[network]
+# Max retry attempts for failed requests
+max_retries = 3
+# Base delay between retries (doubles each attempt)
+retry_base_delay_ms = 1000
+# Override API-reported max threads (0 = use API value)
+max_threads_override = 0
+# Timeout for API requests (seconds)
+request_timeout_secs = 30
+# Timeout for media downloads (seconds)
+download_timeout_secs = 120
+
+[post_processing]
+# Remove media files for ROMs that no longer exist
+remove_orphaned_media = false
+# Remove black bars from screenshots
+remove_pillarboxes = false
