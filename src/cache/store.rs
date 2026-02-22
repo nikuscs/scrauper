@@ -17,7 +17,7 @@ pub struct CacheStats {
 ///
 /// Layout:
 /// ```text
-/// ~/.config/scrauper/cache/<system>/<rom_hash>/
+/// <cache_dir>/<system>/<rom_hash>/
 ///   metadata.json
 ///   screenshot.png
 ///   cover.png
@@ -30,14 +30,6 @@ pub struct CacheStore {
 impl CacheStore {
     pub fn new(base_dir: &Path) -> Self {
         Self { base_dir: base_dir.to_path_buf() }
-    }
-
-    /// Default cache location: `~/.config/scrauper/cache`.
-    pub fn default_dir() -> PathBuf {
-        dirs::config_dir()
-            .unwrap_or_else(|| PathBuf::from(".config"))
-            .join("scrauper")
-            .join("cache")
     }
 
     pub fn base_dir(&self) -> &Path {
@@ -295,10 +287,10 @@ mod tests {
     }
 
     #[test]
-    fn test_default_dir() {
-        let dir = CacheStore::default_dir();
-        assert!(dir.to_str().unwrap().contains("scrauper"));
-        assert!(dir.to_str().unwrap().contains("cache"));
+    fn test_cache_dir_from_config() {
+        let config = crate::config::Config::default();
+        let dir = config.cache_directory();
+        assert_eq!(dir, std::path::PathBuf::from("./cache"));
     }
 
     #[test]

@@ -98,7 +98,7 @@ async fn filename_lookup(
         return Ok(None);
     }
 
-    // Parse all candidates and compute fuzzy scores
+    // Parse all candidates, filter non-games, and compute fuzzy scores
     let candidates: Vec<(ScrapedGame, f32)> = games
         .iter()
         .map(|g| {
@@ -106,6 +106,7 @@ async fn filename_lookup(
             let score = fuzzy_score(&cleaned, &game.name);
             (game, score)
         })
+        .filter(|(game, _)| !game.name.contains("ZZZ(notgame)"))
         .collect();
 
     // Find best match
@@ -198,11 +199,25 @@ fn interactive_select(
 
 /// Parse a full game response from jeuInfos.php.
 fn parse_game_response(resp: &serde_json::Value, config: &Config) -> Result<ScrapedGame, ApiError> {
+    // Check auth level — niveau "0" means invalid user account
+    if let Some(niveau) = resp.pointer("/response/ssuser/niveau").and_then(|v| v.as_str()) {
+        if niveau == "0" {
+            return Err(ApiError::InvalidCredentials);
+        }
+    }
+
     let jeu = resp
         .pointer("/response/jeu")
         .ok_or_else(|| ApiError::Deserialize("Missing 'jeu' in response".to_string()))?;
 
-    Ok(parse_game_from_value(jeu, config))
+    let game = parse_game_from_value(jeu, config);
+
+    // Filter out non-game entries (ES-DE convention)
+    if game.name.contains("ZZZ(notgame)") {
+        return Err(ApiError::GameNotFound);
+    }
+
+    Ok(game)
 }
 
 /// Parse a game object from a JSON value.
@@ -233,7 +248,6 @@ fn parse_game_from_value(jeu: &serde_json::Value, config: &Config) -> ScrapedGam
 
     let regions: Vec<Region> = config.locale.region_priority.clone();
 
-    // Name: noms.nom_{region}
     let name = jeu
         .get("noms")
         .and_then(|noms| resolve_region_text(noms, "nom", &regions))
@@ -267,14 +281,21 @@ fn parse_game_from_value(jeu: &serde_json::Value, config: &Config) -> ScrapedGam
     let publisher = extract_text(jeu, "editeur");
     let developer = extract_text(jeu, "developpeur");
 
-    // Genre: genres[].genre_{language}, joined
+    // Genre: genres[].noms[{langue, text}], joined
     let genre = jeu
         .get("genres")
         .and_then(|g| g.as_array())
         .map(|genres| {
             genres
                 .iter()
-                .filter_map(|g| resolve_language_text(g, "genre", config.locale.language))
+                .filter_map(|g| {
+                    // Real API: genre object has "noms" array of {langue, text}
+                    g.get("noms").map_or_else(
+                        // Flat format: genre object has "genre_en" keys directly
+                        || resolve_language_text(g, "genre", config.locale.language),
+                        |noms| resolve_language_text(noms, "genre", config.locale.language),
+                    )
+                })
                 .collect::<Vec<_>>()
                 .join(", ")
         })
@@ -623,6 +644,57 @@ mod tests {
     }
 
     #[test]
+    fn test_parse_game_response_notgame_filtered() {
+        let config = Config::default();
+        let resp = serde_json::json!({
+            "response": {
+                "jeu": {
+                    "id": "1",
+                    "systeme": {"id": "1"},
+                    "noms": {"nom_wor": "ZZZ(notgame)"}
+                }
+            }
+        });
+        let result = parse_game_response(&resp, &config);
+        assert!(matches!(result, Err(ApiError::GameNotFound)));
+    }
+
+    #[test]
+    fn test_parse_game_response_niveau_zero_rejected() {
+        let config = Config::default();
+        let resp = serde_json::json!({
+            "response": {
+                "ssuser": {"niveau": "0"},
+                "jeu": {
+                    "id": "1",
+                    "systeme": {"id": "1"},
+                    "noms": {"nom_wor": "Test"}
+                }
+            }
+        });
+        let result = parse_game_response(&resp, &config);
+        assert!(matches!(result, Err(ApiError::InvalidCredentials)));
+    }
+
+    #[test]
+    fn test_parse_game_response_niveau_nonzero_ok() {
+        let config = Config::default();
+        let resp = serde_json::json!({
+            "response": {
+                "ssuser": {"niveau": "5"},
+                "jeu": {
+                    "id": "1",
+                    "systeme": {"id": "1"},
+                    "noms": {"nom_wor": "Test Game"}
+                }
+            }
+        });
+        let result = parse_game_response(&resp, &config);
+        assert!(result.is_ok());
+        assert_eq!(result.unwrap().name, "Test Game");
+    }
+
+    #[test]
     fn test_parse_game_from_value_rating_as_object() {
         let config = Config::default();
         let jeu = serde_json::json!({
@@ -649,6 +721,105 @@ mod tests {
         });
         let game = parse_game_from_value(&jeu, &config);
         assert_eq!(game.genre.as_deref(), Some("Action, Platform"));
+    }
+
+    #[test]
+    fn test_parse_game_from_value_genres_real_api_format() {
+        let config = Config::default();
+        let jeu = serde_json::json!({
+            "id": "1",
+            "systeme": {"id": "1"},
+            "noms": [{"region": "wor", "text": "Test"}],
+            "genres": [
+                {
+                    "id": "7",
+                    "principale": "1",
+                    "noms": [
+                        {"langue": "en", "text": "Platform"},
+                        {"langue": "fr", "text": "Plateforme"}
+                    ]
+                },
+                {
+                    "id": "10",
+                    "principale": "1",
+                    "noms": [
+                        {"langue": "en", "text": "Action"},
+                        {"langue": "fr", "text": "Action"}
+                    ]
+                }
+            ]
+        });
+        let game = parse_game_from_value(&jeu, &config);
+        assert_eq!(game.genre.as_deref(), Some("Platform, Action"));
+    }
+
+    #[test]
+    fn test_parse_game_from_value_genres_real_api_format_fr() {
+        let mut config = Config::default();
+        config.locale.language = crate::models::region::Language::Fr;
+        let jeu = serde_json::json!({
+            "id": "1",
+            "systeme": {"id": "1"},
+            "noms": [{"region": "wor", "text": "Test"}],
+            "genres": [
+                {
+                    "id": "7",
+                    "noms": [
+                        {"langue": "en", "text": "Platform"},
+                        {"langue": "fr", "text": "Plateforme"}
+                    ]
+                }
+            ]
+        });
+        let game = parse_game_from_value(&jeu, &config);
+        assert_eq!(game.genre.as_deref(), Some("Plateforme"));
+    }
+
+    #[test]
+    fn test_parse_game_from_value_real_api_format() {
+        let config = Config::default();
+        let jeu = serde_json::json!({
+            "id": "1234",
+            "romid": "5678",
+            "systeme": {"id": "1"},
+            "noms": [
+                {"region": "wor", "text": "Sonic The Hedgehog"},
+                {"region": "us", "text": "Sonic The Hedgehog"},
+                {"region": "jp", "text": "ソニック・ザ・ヘッジホッグ"}
+            ],
+            "synopsis": [
+                {"langue": "en", "text": "A fast blue hedgehog"},
+                {"langue": "fr", "text": "Un hérisson bleu rapide"}
+            ],
+            "note": {"text": "16"},
+            "dates": [
+                {"region": "wor", "text": "1991-06-23"},
+                {"region": "jp", "text": "1991-07-26"}
+            ],
+            "editeur": {"id": "3", "text": "Sega"},
+            "developpeur": {"id": "4", "text": "Sonic Team"},
+            "genres": [
+                {
+                    "id": "7",
+                    "noms": [
+                        {"langue": "en", "text": "Platform"}
+                    ]
+                }
+            ],
+            "joueurs": {"text": "1"}
+        });
+
+        let game = parse_game_from_value(&jeu, &config);
+        assert_eq!(game.game_id, 1234);
+        assert_eq!(game.rom_id, Some(5678));
+        assert_eq!(game.name, "Sonic The Hedgehog");
+        assert_eq!(game.description.as_deref(), Some("A fast blue hedgehog"));
+        assert!((game.rating.unwrap() - 0.8).abs() < 0.01);
+        assert_eq!(game.release_date.as_deref(), Some("19910623T000000"));
+        assert_eq!(game.publisher.as_deref(), Some("Sega"));
+        assert_eq!(game.developer.as_deref(), Some("Sonic Team"));
+        assert_eq!(game.genre.as_deref(), Some("Platform"));
+        assert_eq!(game.players.as_deref(), Some("1"));
     }
 
     #[test]
