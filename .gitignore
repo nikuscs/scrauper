@@ -1,0 +1,5 @@
+/target
+scrauper.toml
+/cache
+tarpaulin-report.json
+.vscode/
