@@ -690,18 +690,22 @@ mod tests {
 
     #[test]
     fn test_generator_1x_resolution() {
-        let mut config = crate::config::Miximage::default();
-        config.width = 640;
-        config.height = 480;
+        let config = crate::config::Miximage {
+            width: 640,
+            height: 480,
+            ..crate::config::Miximage::default()
+        };
         let gen = MiximageGenerator::new(&config, false);
         assert_eq!(gen.mult, 1);
     }
 
     #[test]
     fn test_generator_3x_resolution() {
-        let mut config = crate::config::Miximage::default();
-        config.width = 1920;
-        config.height = 1440;
+        let config = crate::config::Miximage {
+            width: 1920,
+            height: 1440,
+            ..crate::config::Miximage::default()
+        };
         let gen = MiximageGenerator::new(&config, false);
         assert_eq!(gen.mult, 3);
     }

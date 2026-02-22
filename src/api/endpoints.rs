@@ -518,7 +518,7 @@ mod tests {
         let entry = SystemEntry {
             id: json!(1),
             noms: Some(json!({"nom_eu": "Test"})),
-            extensions: Some("".to_string()),
+            extensions: Some(String::new()),
             system_type: None,
             compagnie: None,
         };
