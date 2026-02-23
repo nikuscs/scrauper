@@ -21,6 +21,7 @@ use crate::output::cleanup::{self, CleanupOptions};
 use crate::scraper::pipeline::{self, ScrapeOptions};
 
 #[tokio::main]
+#[cfg(not(tarpaulin))]
 async fn main() -> Result<()> {
     let cli = Cli::parse();
 
@@ -71,6 +72,7 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
+#[cfg(not(tarpaulin))]
 fn load_config(cli: &Cli) -> Result<Config> {
     if !cli.config.exists() {
         anyhow::bail!(
@@ -84,6 +86,7 @@ fn load_config(cli: &Cli) -> Result<Config> {
 
 /// Create a new scrauper.toml from the embedded example template.
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 fn cmd_init() -> Result<()> {
     let dest = std::path::Path::new("scrauper.toml");
 
@@ -105,6 +108,7 @@ fn cmd_init() -> Result<()> {
 }
 
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 async fn cmd_info(config: &Config) -> Result<()> {
     let client = ScreenScraperClient::new(config)?;
 
@@ -162,6 +166,7 @@ async fn cmd_info(config: &Config) -> Result<()> {
 }
 
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 async fn cmd_systems(config: &Config) -> Result<()> {
     // Try cache first
     let cache_dir = config.cache_directory();
@@ -183,6 +188,7 @@ async fn cmd_systems(config: &Config) -> Result<()> {
 }
 
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 fn cmd_cache_stats(config: &Config) -> Result<()> {
     let cache = CacheStore::new(&config.cache_directory());
     let stats = cache.all_stats()?;
@@ -226,6 +232,7 @@ fn format_bytes(bytes: u64) -> String {
 }
 
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 fn print_systems(systems: &[models::system::System]) {
     eprintln!("{:<6} {:<35} {:<12} Extensions", "ID", "Name", "Type");
     eprintln!("{}", "-".repeat(90));

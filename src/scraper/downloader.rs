@@ -786,4 +786,223 @@ mod tests {
 
         assert!(result.is_err(), "Expected error to propagate");
     }
+
+    #[tokio::test]
+    async fn test_download_media_marquee_fallback_to_wheel() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel-hd(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"WHEEL_DATA".to_vec()))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("marquee.png");
+
+        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        match result {
+            DownloadResult::Downloaded(_, data) => assert_eq!(data, b"WHEEL_DATA"),
+            _ => panic!("Expected DownloadResult::Downloaded from wheel fallback"),
+        }
+    }
+
+    #[tokio::test]
+    async fn test_download_media_marquee_fallback_unchanged() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel-hd(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("CRCOK"))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("marquee.png");
+
+        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        assert!(matches!(result, DownloadResult::Unchanged));
+    }
+
+    #[tokio::test]
+    async fn test_download_media_box3d_fallback_unchanged() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-3D(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-2D(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("CRCOK"))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        config.content.media.fallbacks.cover_for_missing_3d_box = true;
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("box3d.png");
+
+        let result =
+            download_media(&client, 123, 1, &MediaType::Box3d, &dest, &config).await.unwrap();
+        assert!(matches!(result, DownloadResult::Unchanged));
+    }
+
+    #[tokio::test]
+    async fn test_download_media_box3d_fallback_not_available() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-3D(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-2D(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        config.content.media.fallbacks.cover_for_missing_3d_box = true;
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("box3d.png");
+
+        let result =
+            download_media(&client, 123, 1, &MediaType::Box3d, &dest, &config).await.unwrap();
+        assert!(matches!(result, DownloadResult::NotAvailable));
+    }
+
+    #[tokio::test]
+    async fn test_download_media_box3d_fallback_error_propagates() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-3D(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "box-2D(us)"))
+            .respond_with(ResponseTemplate::new(403))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        config.content.media.fallbacks.cover_for_missing_3d_box = true;
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("box3d.png");
+
+        let result = download_media(&client, 123, 1, &MediaType::Box3d, &dest, &config).await;
+        assert!(result.is_err());
+    }
+
+    #[tokio::test]
+    async fn test_download_media_marquee_fallback_not_available_after_game_not_found() {
+        let mock_server = MockServer::start().await;
+
+        // Primary marquee missing
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel-hd(us)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        // Fallback wheel returns 404 for first region, then NOMEDIA for second region
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel(us)"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "wheel(eu)"))
+            .respond_with(ResponseTemplate::new(200).set_body_string("NOMEDIA"))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us, Region::Eu];
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("marquee.png");
+
+        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        assert!(matches!(result, DownloadResult::NotAvailable));
+    }
+
+    #[tokio::test]
+    async fn test_download_media_existing_file_sends_crc() {
+        let mock_server = MockServer::start().await;
+        let tmp = tempfile::TempDir::new().unwrap();
+        let dest = tmp.path().join("existing.png");
+        std::fs::write(&dest, b"hello world").unwrap();
+        let crc = compute_file_crc(&dest).await.unwrap();
+
+        Mock::given(method("GET"))
+            .and(path("/mediaJeu.php"))
+            .and(query_param("media", "ss(us)"))
+            .and(query_param("crc", crc.as_str()))
+            .respond_with(ResponseTemplate::new(200).set_body_bytes(b"UPDATED".to_vec()))
+            .mount(&mock_server)
+            .await;
+
+        let mut config = mock_config();
+        config.locale.region_priority = vec![Region::Us];
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+
+        let result =
+            download_media(&client, 123, 1, &MediaType::Screenshot, &dest, &config).await.unwrap();
+        match result {
+            DownloadResult::Downloaded(_, data) => assert_eq!(data, b"UPDATED"),
+            _ => panic!("Expected DownloadResult::Downloaded"),
+        }
+    }
 }

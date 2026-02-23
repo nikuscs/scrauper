@@ -531,4 +531,48 @@ mod tests {
         let priority = vec![Region::Jp];
         assert_eq!(resolve_by_region(&available, &priority), Some("JP".to_string()));
     }
+
+    #[test]
+    fn test_resolve_region_text_array_ss_fallback() {
+        let arr = json!([
+            {"region": "ss", "text": "Internal Name"},
+            {"region": "jp", "text": "JP Name"}
+        ]);
+        let priority = vec![Region::Us, Region::Eu];
+        assert_eq!(resolve_region_text(&arr, "nom", &priority), Some("Internal Name".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_region_text_array_first_non_empty_fallback() {
+        let arr = json!([
+            {"region": "xx", "text": ""},
+            {"region": "yy", "text": "Fallback Name"}
+        ]);
+        let priority = vec![Region::Us];
+        assert_eq!(resolve_region_text(&arr, "nom", &priority), Some("Fallback Name".to_string()));
+    }
+
+    #[test]
+    fn test_resolve_language_text_array_english_fallback() {
+        let arr = json!([
+            {"langue": "en", "text": "English text"},
+            {"langue": "fr", "text": "French text"}
+        ]);
+        assert_eq!(
+            resolve_language_text(&arr, "synopsis", Language::De),
+            Some("English text".to_string())
+        );
+    }
+
+    #[test]
+    fn test_resolve_language_text_array_first_non_empty_fallback() {
+        let arr = json!([
+            {"langue": "fr", "text": ""},
+            {"langue": "jp", "text": "Japanese text"}
+        ]);
+        assert_eq!(
+            resolve_language_text(&arr, "synopsis", Language::En),
+            Some("Japanese text".to_string())
+        );
+    }
 }

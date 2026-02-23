@@ -8,6 +8,9 @@ pub enum ApiError {
     #[error("Daily quota exceeded (430): scraping limit reached for today")]
     DailyQuotaExceeded,
 
+    #[error("All configured accounts are exhausted for today")]
+    AllAccountsExhausted,
+
     #[error("Too many unknown ROMs (431): too many unrecognized ROMs scraped today")]
     TooManyUnknownRoms,
 
@@ -66,6 +69,7 @@ impl ApiError {
         matches!(
             self,
             ApiError::DailyQuotaExceeded
+                | ApiError::AllAccountsExhausted
                 | ApiError::TooManyUnknownRoms
                 | ApiError::ApiClosedDown
                 | ApiError::SoftwareBlacklisted
@@ -103,6 +107,7 @@ mod tests {
         assert!(!ApiError::GameNotFound.is_retryable());
         assert!(!ApiError::InvalidCredentials.is_retryable());
         assert!(!ApiError::DailyQuotaExceeded.is_retryable());
+        assert!(!ApiError::AllAccountsExhausted.is_retryable());
     }
 
     #[test]
@@ -112,6 +117,7 @@ mod tests {
         assert!(ApiError::ApiClosedDown.is_fatal());
         assert!(ApiError::SoftwareBlacklisted.is_fatal());
         assert!(ApiError::InvalidCredentials.is_fatal());
+        assert!(ApiError::AllAccountsExhausted.is_fatal());
         assert!(!ApiError::RateLimited.is_fatal());
         assert!(!ApiError::GameNotFound.is_fatal());
         assert!(!ApiError::ApiClosedOverloaded.is_fatal());
@@ -129,6 +135,7 @@ mod tests {
         let variants: Vec<(ApiError, &str)> = vec![
             (ApiError::RateLimited, "429"),
             (ApiError::DailyQuotaExceeded, "430"),
+            (ApiError::AllAccountsExhausted, "exhausted"),
             (ApiError::TooManyUnknownRoms, "431"),
             (ApiError::GameNotFound, "404"),
             (ApiError::ApiClosedOverloaded, "401"),
@@ -175,6 +182,7 @@ mod tests {
         let non_retryable = vec![
             ApiError::DailyQuotaExceeded,
             ApiError::TooManyUnknownRoms,
+            ApiError::AllAccountsExhausted,
             ApiError::GameNotFound,
             ApiError::ApiClosedDown,
             ApiError::SoftwareBlacklisted,

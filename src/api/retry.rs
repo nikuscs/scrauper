@@ -11,43 +11,29 @@ where
     F: Fn() -> Fut,
     Fut: Future<Output = Result<T, ApiError>>,
 {
-    let mut attempts = 0;
-
-    loop {
-        match operation().await {
+    for attempts in 0.. {
+        let outcome = operation().await;
+        let err = match outcome {
             Ok(result) => return Ok(result),
-            Err(err) => {
-                attempts += 1;
+            Err(err) => err,
+        };
 
-                if err.is_fatal() {
-                    tracing::error!("Fatal API error (aborting): {}", err);
-                    return Err(err);
-                }
-
-                if !err.is_retryable() || attempts > config.max_retries {
-                    return Err(err);
-                }
-
-                let delay = retry_delay(config, attempts);
-                tracing::warn!(
-                    "API request failed (attempt {}/{}): {}. Retrying in {:.1}s",
-                    attempts,
-                    config.max_retries,
-                    err,
-                    delay.as_secs_f64()
-                );
-
-                // Special handling: server overloaded gets a longer wait
-                let delay = if matches!(err, ApiError::ApiClosedOverloaded) {
-                    Duration::from_secs(60)
-                } else {
-                    delay
-                };
-
-                tokio::time::sleep(delay).await;
-            }
+        if err.is_fatal() {
+            tracing::error!("Fatal API error (aborting): {}", err);
+            return Err(err);
         }
+        if !err.is_retryable() || attempts >= config.max_retries {
+            return Err(err);
+        }
+
+        let attempt_num = attempts + 1;
+        let base_delay = retry_delay(config, attempt_num);
+        let delay =
+            if matches!(err, ApiError::ApiClosedOverloaded) { Duration::from_secs(60) } else { base_delay };
+        tokio::time::sleep(delay).await;
     }
+
+    unreachable!("retry loop must return or error");
 }
 
 fn retry_delay(config: &Network, attempt: u32) -> Duration {

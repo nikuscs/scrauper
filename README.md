@@ -1,12 +1,23 @@
-# Scrauper
+# 🕹️ scrauper
 
-Multi-threaded [ScreenScraper.fr](https://www.screenscraper.fr/) scraper for [ES-DE](https://es-de.org/) with multi-account rotation, proxy support, and miximage generation.
+![CI](https://github.com/nikuscs/scrauper/actions/workflows/ci.yml/badge.svg)
+![Release](https://img.shields.io/github/v/release/nikuscs/scrauper)
+![License](https://img.shields.io/badge/license-MIT-blue.svg)
 
-[![CI](https://github.com/nikuscs/scrauper/actions/workflows/ci.yml/badge.svg)](https://github.com/nikuscs/scrauper/actions/workflows/ci.yml)
-[![Release](https://github.com/nikuscs/scrauper/actions/workflows/release.yml/badge.svg)](https://github.com/nikuscs/scrauper/releases)
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+**Fast multi-threaded [ScreenScraper.fr](https://www.screenscraper.fr/) scraper for [ES-DE](https://es-de.org/) with multi-account rotation, proxy support, and miximage generation.**
 
-## Why Scrauper?
+> **Disclaimer:** This project is for **educational purposes and AI automation research only**.
+> The authors are not responsible for any misuse or for any damages resulting from the use of this tool.
+> Users are solely responsible for ensuring compliance with applicable laws and the terms of service
+> of any websites accessed. This software is provided "as-is" without warranty of any kind.
+>
+> If you are a rights holder and wish to have this project removed, please [contact me](https://github.com/nikuscs).
+
+> **Note:** This project was partially developed with AI assistance and may contain bugs or unexpected behavior. Use at your own risk.
+
+## Why?
+
+Scraping metadata for retro game collections is painful. ScreenScraper.fr is the best source, but the official tools are slow, single-threaded, and hit daily API quotas fast. If you have thousands of ROMs across multiple systems, you're looking at days of scraping.
 
 - **Multi-account rotation** — bypass daily quotas by rotating across multiple ScreenScraper accounts
 - **Pixel-accurate miximage generation** — pure Rust compositing, no ImageMagick dependency
@@ -17,19 +28,21 @@ Multi-threaded [ScreenScraper.fr](https://www.screenscraper.fr/) scraper for [ES
 - **Hash-based ROM identification** — CRC32 + MD5 + SHA1 for accurate matching
 - **Interactive mode** — manual selection for ambiguous matches
 
-## Installation
-
-### Pre-built binaries
-
-Download the latest release for your platform from the [Releases](https://github.com/nikuscs/scrauper/releases) page.
-
-### From source
+## Install
 
 ```bash
+# From source (requires Rust)
 cargo install --git https://github.com/nikuscs/scrauper
+
+# Or clone and build
+git clone https://github.com/nikuscs/scrauper
+cd scrauper
+cargo build --release
 ```
 
-## Quick Start
+Pre-built binaries available in [Releases](https://github.com/nikuscs/scrauper/releases).
+
+## Usage
 
 ```bash
 # Generate a config file
@@ -42,7 +55,7 @@ $EDITOR scrauper.toml
 scrauper scrape
 ```
 
-## Usage
+### Commands
 
 ```
 scrauper <COMMAND>
@@ -119,4 +132,4 @@ See [`scrauper.toml.example`](scrauper.toml.example) for the full configuration 
 
 ## License
 
-[MIT](LICENSE)
+MIT

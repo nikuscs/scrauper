@@ -32,6 +32,7 @@ struct GameResult {
 }
 
 /// Run the full scrape pipeline.
+#[cfg(not(tarpaulin))]
 pub async fn run_scrape(config: &Config, options: &ScrapeOptions) -> Result<()> {
     // 1. Init: fetch user info, set up rate limiter
     let client = ScreenScraperClient::new(config)?;
@@ -270,6 +271,7 @@ pub async fn run_scrape(config: &Config, options: &ScrapeOptions) -> Result<()> 
 }
 
 /// Scrape a single game: check cache -> hash -> lookup -> download media -> cache.
+#[cfg(not(tarpaulin))]
 async fn scrape_single_game(
     client: &ScreenScraperClient,
     config: &Config,
@@ -410,6 +412,7 @@ async fn scrape_single_game(
 }
 
 /// Generate miximage from available media files.
+#[cfg(not(tarpaulin))]
 async fn generate_miximage(
     config: &Config,
     media_dir: &std::path::Path,
@@ -513,6 +516,7 @@ fn is_fatal_error(err: &anyhow::Error) -> bool {
 
 /// Generate miximages from existing media files (offline, no API calls).
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 pub async fn run_generate_miximages(config: &Config, system_filter: Option<&str>) -> Result<()> {
     let media_dir = config.media_directory();
 

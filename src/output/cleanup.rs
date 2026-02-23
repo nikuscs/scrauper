@@ -211,6 +211,8 @@ fn format_bytes(bytes: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::PermissionsExt;
 
     #[test]
     fn test_collect_rom_stems() {
@@ -442,5 +444,44 @@ mod tests {
         let options = CleanupOptions { dry_run: true, auto_confirm: false };
         let summary = run_cleanup(&config, &options).unwrap();
         assert_eq!(summary.orphans_found, 2);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn test_run_cleanup_delete_failure_counts_remaining() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rom_dir = tmp.path().join("roms");
+        let media_dir = tmp.path().join("media");
+        let snes_rom = rom_dir.join("snes");
+        let snes_media = media_dir.join("snes").join("screenshots");
+
+        std::fs::create_dir_all(&snes_rom).unwrap();
+        std::fs::create_dir_all(&snes_media).unwrap();
+        std::fs::write(snes_rom.join("Sonic.zip"), b"rom").unwrap();
+        let orphan = snes_media.join("Orphan.png");
+        std::fs::write(&orphan, b"orphan").unwrap();
+
+        // Make directory non-writable to force remove_file failure.
+        let original_perms = std::fs::metadata(&snes_media).unwrap().permissions();
+        let mut read_only_perms = original_perms.clone();
+        read_only_perms.set_mode(0o555);
+        std::fs::set_permissions(&snes_media, read_only_perms).unwrap();
+
+        let mut config = Config::default();
+        config.credentials.devid = "test".to_string();
+        config.credentials.devpassword = "test".to_string();
+        config.paths.rom_directory = rom_dir.to_string_lossy().to_string();
+        config.paths.media_directory = media_dir.to_string_lossy().to_string();
+
+        let options = CleanupOptions { dry_run: false, auto_confirm: true };
+        let summary = run_cleanup(&config, &options).unwrap();
+
+        // Restore permissions so tempdir can be cleaned up.
+        std::fs::set_permissions(&snes_media, original_perms).unwrap();
+
+        assert_eq!(summary.orphans_found, 1);
+        assert_eq!(summary.orphans_deleted, 0);
+        assert_eq!(summary.bytes_freed, 0);
+        assert!(orphan.exists());
     }
 }

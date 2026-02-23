@@ -424,6 +424,15 @@ mod tests {
     }
 
     #[test]
+    fn test_remove_transparent_padding_zero_sized_image() {
+        let img = RgbaImage::new(0, 0);
+        let result = remove_transparent_padding(&DynamicImage::ImageRgba8(img));
+        let (w, h) = result.dimensions();
+        assert_eq!(w, 0);
+        assert_eq!(h, 0);
+    }
+
+    #[test]
     fn test_fit_image_contain_preserves_aspect() {
         let img = DynamicImage::ImageRgba8(RgbaImage::from_pixel(200, 100, Rgba([255, 0, 0, 255])));
         let result = fit_image(&img, 100, 100, FitMode::Contain, FilterType::Nearest);
@@ -473,6 +482,13 @@ mod tests {
     }
 
     #[test]
+    fn test_sample_frame_color_zero_canvas_width_uses_min_spacing() {
+        let img = RgbaImage::from_pixel(2, 2, Rgba([64, 96, 128, 255]));
+        let color = sample_frame_color(&img, 0);
+        assert_eq!(color[3], 255);
+    }
+
+    #[test]
     fn test_add_drop_shadow_expands_canvas() {
         let img = RgbaImage::from_pixel(10, 10, Rgba([255, 0, 0, 255]));
         let shadow_size = 4;
@@ -493,5 +509,36 @@ mod tests {
         assert_eq!(px[1], 0);
         assert_eq!(px[2], 0);
         assert_eq!(px[3], 255);
+    }
+
+    #[test]
+    fn test_add_drop_shadow_zero_blur_iterations() {
+        let img = RgbaImage::from_pixel(4, 4, Rgba([10, 20, 30, 255]));
+        let result = add_drop_shadow(&img, 2, 0.5, 0);
+        let (w, h) = result.dimensions();
+        assert_eq!(w, 8);
+        assert_eq!(h, 8);
+    }
+
+    #[test]
+    fn test_hue_to_rgb_wraps_out_of_range_t() {
+        let p = 0.2;
+        let q = 0.8;
+        let wrapped_low = hue_to_rgb(p, q, -0.1);
+        let wrapped_high = hue_to_rgb(p, q, 1.1);
+        assert!((wrapped_low - hue_to_rgb(p, q, 0.9)).abs() < 1e-9);
+        assert!((wrapped_high - hue_to_rgb(p, q, 0.1)).abs() < 1e-9);
+    }
+
+    #[test]
+    fn test_hue_to_rgb_piecewise_segments() {
+        let p = 0.2;
+        let q = 0.8;
+        let first = hue_to_rgb(p, q, 0.10);
+        assert!((first - (p + (q - p) * 6.0 * 0.10)).abs() < 1e-9);
+        assert!((hue_to_rgb(p, q, 0.40) - q).abs() < 1e-9);
+        let third = hue_to_rgb(p, q, 0.60);
+        assert!(third > p && third < q);
+        assert!((hue_to_rgb(p, q, 0.90) - p).abs() < 1e-9);
     }
 }

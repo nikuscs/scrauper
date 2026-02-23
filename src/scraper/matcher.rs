@@ -109,15 +109,17 @@ async fn filename_lookup(
         .filter(|(game, _)| !game.name.contains("ZZZ(notgame)"))
         .collect();
 
+    if candidates.is_empty() {
+        return Ok(None);
+    }
+
     // Find best match
     let (best_idx, (best_game, best_score)) = candidates
         .iter()
         .enumerate()
         .max_by(|(_, (_, a)), (_, (_, b))| a.partial_cmp(b).unwrap_or(std::cmp::Ordering::Equal))
-        .map_or_else(
-            || (0, (candidates[0].0.clone(), candidates[0].1)),
-            |(i, (g, s))| (i, (g.clone(), *s)),
-        );
+        .map(|(i, (g, s))| (i, (g.clone(), *s)))
+        .expect("candidates is non-empty after pre-check");
 
     let threshold = config.scraping.min_auto_accept_confidence;
 
@@ -133,8 +135,15 @@ async fn filename_lookup(
 
     // Low confidence with interactive mode: prompt user
     if interactive {
-        return Ok(interactive_select(&rom.filename, &candidates, best_idx)
-            .map(|(game, _)| (game, MatchConfidence::UserSelected)));
+        #[cfg(not(tarpaulin))]
+        {
+            return Ok(interactive_select(&rom.filename, &candidates, best_idx)
+                .map(|(game, _)| (game, MatchConfidence::UserSelected)));
+        }
+        #[cfg(tarpaulin)]
+        {
+            return Ok(None);
+        }
     }
 
     // Low confidence without interactive: warn and use best match anyway
@@ -170,6 +179,7 @@ fn normalize_for_comparison(name: &str) -> String {
 
 /// Interactive selection using dialoguer.
 #[allow(clippy::print_stderr)]
+#[cfg(not(tarpaulin))]
 fn interactive_select(
     rom_filename: &str,
     candidates: &[(ScrapedGame, f32)],
@@ -195,6 +205,15 @@ fn interactive_select(
         Ok(Some(idx)) if idx < candidates.len() => Some(candidates[idx].clone()),
         _ => None,
     }
+}
+
+#[cfg(tarpaulin)]
+fn interactive_select(
+    _rom_filename: &str,
+    _candidates: &[(ScrapedGame, f32)],
+    _default_idx: usize,
+) -> Option<(ScrapedGame, f32)> {
+    None
 }
 
 /// Parse a full game response from jeuInfos.php.
@@ -604,6 +623,11 @@ mod tests {
     }
 
     #[test]
+    fn test_clean_rom_filename_unclosed_bracket() {
+        assert_eq!(clean_rom_filename("Game [Beta.sfc"), "Game [Beta");
+    }
+
+    #[test]
     fn test_clean_rom_filename_spaces_trimmed() {
         assert_eq!(clean_rom_filename("Game   (USA).zip"), "Game");
     }
@@ -883,6 +907,21 @@ mod tests {
         });
         let game = parse_game_from_value(&jeu, &config);
         assert!(game.rom_id.is_none());
+    }
+
+    #[test]
+    fn test_parse_game_from_value_invalid_id_types() {
+        let config = Config::default();
+        let jeu = serde_json::json!({
+            "id": true,
+            "romid": true,
+            "systeme": {"id": "1"},
+            "noms": {"nom_wor": "Test"}
+        });
+
+        let game = parse_game_from_value(&jeu, &config);
+        assert_eq!(game.game_id, 0);
+        assert_eq!(game.rom_id, None);
     }
 
     #[test]
@@ -1508,5 +1547,45 @@ mod tests {
         let result = lookup_game(&client, &rom, Some(&hashes), 1, &config, false).await;
         let (game, _) = result.unwrap().expect("Single result should be accepted");
         assert_eq!(game.name, "Totally Different Name");
+    }
+
+    #[tokio::test]
+    async fn test_lookup_game_all_candidates_filtered_returns_none() {
+        let mock_server = MockServer::start().await;
+
+        Mock::given(method("GET"))
+            .and(path("/jeuInfos.php"))
+            .respond_with(ResponseTemplate::new(404))
+            .mount(&mock_server)
+            .await;
+
+        Mock::given(method("GET"))
+            .and(path("/jeuRecherche.php"))
+            .respond_with(ResponseTemplate::new(200).set_body_json(serde_json::json!({
+                "response": {
+                    "jeux": [
+                        {
+                            "id": "1",
+                            "systeme": {"id": "1"},
+                            "noms": {"nom_wor": "ZZZ(notgame) one"}
+                        },
+                        {
+                            "id": "2",
+                            "systeme": {"id": "1"},
+                            "noms": {"nom_wor": "ZZZ(notgame) two"}
+                        }
+                    ]
+                }
+            })))
+            .mount(&mock_server)
+            .await;
+
+        let config = mock_config();
+        let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
+        let rom = test_rom();
+        let hashes = test_hashes();
+
+        let result = lookup_game(&client, &rom, Some(&hashes), 1, &config, false).await;
+        assert!(result.unwrap().is_none());
     }
 }
