@@ -3,6 +3,11 @@ name = "scrauper"
 version = "0.1.0"
 edition = "2021"
 description = "Multi-threaded ScreenScraper API scraper for ES-DE"
+license = "MIT"
+repository = "https://github.com/nikuscs/scrauper"
+readme = "README.md"
+keywords = ["screenscraper", "es-de", "emulation", "scraper", "rom"]
+categories = ["command-line-utilities"]
 
 [dependencies]
 # Async runtime
