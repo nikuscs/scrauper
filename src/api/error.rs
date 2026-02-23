@@ -8,6 +8,7 @@ pub enum ApiError {
     #[error("Daily quota exceeded (430): scraping limit reached for today")]
     DailyQuotaExceeded,
 
+    #[allow(dead_code)]
     #[error("All configured accounts are exhausted for today")]
     AllAccountsExhausted,
 

@@ -812,7 +812,8 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let dest = tmp.path().join("marquee.png");
 
-        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        let result =
+            download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
         match result {
             DownloadResult::Downloaded(_, data) => assert_eq!(data, b"WHEEL_DATA"),
             _ => panic!("Expected DownloadResult::Downloaded from wheel fallback"),
@@ -844,7 +845,8 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let dest = tmp.path().join("marquee.png");
 
-        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        let result =
+            download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
         assert!(matches!(result, DownloadResult::Unchanged));
     }
 
@@ -974,7 +976,8 @@ mod tests {
         let tmp = tempfile::TempDir::new().unwrap();
         let dest = tmp.path().join("marquee.png");
 
-        let result = download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
+        let result =
+            download_media(&client, 123, 1, &MediaType::Marquee, &dest, &config).await.unwrap();
         assert!(matches!(result, DownloadResult::NotAvailable));
     }
 

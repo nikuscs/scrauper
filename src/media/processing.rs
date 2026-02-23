@@ -535,7 +535,7 @@ mod tests {
         let p = 0.2;
         let q = 0.8;
         let first = hue_to_rgb(p, q, 0.10);
-        assert!((first - (p + (q - p) * 6.0 * 0.10)).abs() < 1e-9);
+        assert!((first - ((q - p) * 6.0).mul_add(0.10, p)).abs() < 1e-9);
         assert!((hue_to_rgb(p, q, 0.40) - q).abs() < 1e-9);
         let third = hue_to_rgb(p, q, 0.60);
         assert!(third > p && third < q);

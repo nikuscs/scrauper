@@ -28,8 +28,11 @@ where
 
         let attempt_num = attempts + 1;
         let base_delay = retry_delay(config, attempt_num);
-        let delay =
-            if matches!(err, ApiError::ApiClosedOverloaded) { Duration::from_secs(60) } else { base_delay };
+        let delay = if matches!(err, ApiError::ApiClosedOverloaded) {
+            Duration::from_secs(60)
+        } else {
+            base_delay
+        };
         tokio::time::sleep(delay).await;
     }
 

@@ -202,6 +202,7 @@ mod tests {
         assert_eq!(permit.ssid, "user1");
         assert_eq!(permit.sspassword, "pass_user1");
         assert_eq!(permit.account_index, 0);
+        drop(permit);
     }
 
     #[tokio::test]
@@ -213,6 +214,7 @@ mod tests {
         let permit = pool.acquire().await.unwrap();
         assert_eq!(permit.ssid, "user2");
         assert_eq!(permit.account_index, 1);
+        drop(permit);
     }
 
     #[tokio::test]
@@ -221,8 +223,7 @@ mod tests {
             test_account_info("user1", 100, 100),
             test_account_info("user2", 200, 200),
         ]);
-        let result = pool.acquire().await;
-        assert!(matches!(result, Err(ApiError::AllAccountsExhausted)));
+        assert!(matches!(pool.acquire().await, Err(ApiError::AllAccountsExhausted)));
     }
 
     #[tokio::test]
@@ -243,6 +244,7 @@ mod tests {
         // Next acquire should return user2
         let permit = pool.acquire().await.unwrap();
         assert_eq!(permit.ssid, "user2");
+        drop(permit);
     }
 
     #[tokio::test]
@@ -253,8 +255,7 @@ mod tests {
         ]);
         pool.mark_exhausted(0);
         pool.mark_exhausted(1);
-        let result = pool.acquire().await;
-        assert!(matches!(result, Err(ApiError::AllAccountsExhausted)));
+        assert!(matches!(pool.acquire().await, Err(ApiError::AllAccountsExhausted)));
     }
 
     #[tokio::test]
@@ -263,6 +264,7 @@ mod tests {
         let permit = pool.acquire().await.unwrap();
         assert_eq!(permit.ssid, "only_user");
         assert_eq!(permit.account_index, 0);
+        drop(permit);
     }
 
     #[test]
@@ -285,6 +287,7 @@ mod tests {
         let permit = pool.acquire().await.unwrap();
         assert_eq!(permit.ssid, "user3");
         assert_eq!(permit.account_index, 2);
+        drop(permit);
     }
 
     #[test]
