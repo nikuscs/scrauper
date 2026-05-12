@@ -16,6 +16,9 @@ env:
   CARGO_TERM_COLOR: always
   BINARY_NAME: scrauper
 
+permissions:
+  contents: read
+
 jobs:
   checks:
     name: Checks
@@ -34,6 +37,7 @@ jobs:
     name: Create Tag
     needs: checks
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: write
     outputs:
@@ -159,6 +163,7 @@ jobs:
     name: Create Release
     needs: [create-tag, build]
     runs-on: ubuntu-latest
+    environment: production
     permissions:
       contents: write
 
@@ -211,6 +216,7 @@ jobs:
     needs: [create-tag, build, release]
     runs-on: ubuntu-latest
     if: failure()
+    environment: production
     permissions:
       contents: write
     steps:

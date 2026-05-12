@@ -1,0 +1,6 @@
+/.github/ @nikuscs
+/Cargo.toml @nikuscs
+/Cargo.lock @nikuscs
+/rustfmt.toml @nikuscs
+/scrauper.toml.example @nikuscs
+/src/ @nikuscs
