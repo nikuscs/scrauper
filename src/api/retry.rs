@@ -29,7 +29,7 @@ where
         let attempt_num = attempts + 1;
         let base_delay = retry_delay(config, attempt_num);
         let delay = if matches!(err, ApiError::ApiClosedOverloaded) {
-            Duration::from_secs(60)
+            Duration::from_mins(1)
         } else {
             base_delay
         };
@@ -239,7 +239,7 @@ mod tests {
         assert_eq!(result.unwrap(), 42);
         assert_eq!(call_count.load(std::sync::atomic::Ordering::Relaxed), 2);
         // With paused time, the 60s sleep is instant but the elapsed time reflects it
-        assert!(elapsed >= Duration::from_secs(60), "Expected >=60s delay, got {:?}", elapsed);
+        assert!(elapsed >= Duration::from_mins(1), "Expected >=60s delay, got {:?}", elapsed);
     }
 
     #[tokio::test]

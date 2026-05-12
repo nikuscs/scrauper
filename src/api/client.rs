@@ -378,7 +378,7 @@ mod tests {
         let config = test_config();
         let client = ScreenScraperClient::with_base_url(&config, &mock_server.uri()).unwrap();
         let response =
-            client.get_raw("media_endpoint.php", &[], Duration::from_secs(60)).await.unwrap();
+            client.get_raw("media_endpoint.php", &[], Duration::from_mins(1)).await.unwrap();
         let bytes = response.bytes().await.unwrap();
 
         assert_eq!(bytes.as_ref(), b"data");
