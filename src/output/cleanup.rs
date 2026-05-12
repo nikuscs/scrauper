@@ -93,7 +93,7 @@ pub fn run_cleanup(config: &Config, options: &CleanupOptions) -> Result<CleanupS
     eprintln!("Found {} orphaned media file(s):", total_orphans.len());
     let mut total_size = 0u64;
     for path in &total_orphans {
-        let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+        let size = path.metadata().map_or(0, |m| m.len());
         total_size += size;
         let rel = path
             .strip_prefix(&media_dir)
@@ -128,7 +128,7 @@ pub fn run_cleanup(config: &Config, options: &CleanupOptions) -> Result<CleanupS
     let mut deleted = 0;
     let mut freed = 0u64;
     for path in &total_orphans {
-        let size = path.metadata().map(|m| m.len()).unwrap_or(0);
+        let size = path.metadata().map_or(0, |m| m.len());
         match std::fs::remove_file(path) {
             Ok(()) => {
                 deleted += 1;

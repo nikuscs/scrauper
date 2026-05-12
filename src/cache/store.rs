@@ -167,7 +167,7 @@ fn dir_size(path: &Path) -> u64 {
         for entry in entries.filter_map(std::result::Result::ok) {
             let p = entry.path();
             if p.is_file() {
-                total += p.metadata().map(|m| m.len()).unwrap_or(0);
+                total += p.metadata().map_or(0, |m| m.len());
             } else if p.is_dir() {
                 total += dir_size(&p);
             }
